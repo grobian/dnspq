@@ -1,6 +1,7 @@
+CFLAGS ?= -O2 -Wall
 
 dnspq: dnspq.o
 	$(CC) -o $@ $(LDFLAGS) $<
 
 clean:
-	rm dnspq dnspq.o
+	rm -f dnspq dnspq.o
