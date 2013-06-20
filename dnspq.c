@@ -73,8 +73,7 @@ int dnsq(const char *a) {
 	unsigned char len;
 	int saddr_buf_len;
 	fd_set fds;
-	int fd[MAXSERVERS];
-	int maxfd;
+	int fd;
 	struct timeval tv;
 	int i;
 
@@ -115,16 +114,12 @@ int dnsq(const char *a) {
 	/* answer sections not necessary */
 
 	FD_ZERO(&fds);
-	maxfd = 0;
+	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+		return 1;
+	FD_SET(fd, &fds);
+	len = (unsigned char)(p - dnspkg);  /* should always fit */
 	for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
-		if ((fd[i] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-			return 1;
-		FD_SET(fd[i], &fds);
-		if (fd[i] > maxfd)
-			maxfd = fd[i];
-
-		len = (unsigned char)(p - dnspkg);  /* should always fit */
-		if (sendto(fd[i], dnspkg, len, 0,
+		if (sendto(fd, dnspkg, len, 0,
 					(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
 			return 2;  /* TODO: fail only when all fail? */
 	}
@@ -132,23 +127,15 @@ int dnsq(const char *a) {
 	/* wait half a second */
 	tv.tv_sec = 0;
 	tv.tv_usec = 500000;
-	if (select(maxfd + 1, &fds, NULL, NULL, &tv) <= 0)
+	if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0)
 		return 3;  /* nothing happened */
 
-	/* find the first one that responded */
-	for (i = 0;
-			i < MAXSERVERS && dnsservers[i] != NULL && !FD_ISSET(fd[i], &fds);
-			i++)
-		;
-	if (i == MAXSERVERS || dnsservers[i] == NULL)
-		return 6;  /* no answers?!? */
-	saddr_buf_len = recvfrom(fd[i], dnspkg, sizeof(dnspkg), 0, NULL, 0);
+	saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
 	if (saddr_buf_len == -1)
 		return 4;
 
-	/* close everything we don't need */
-	for (; i >= 0; i--)
-		close(fd[i]);
+	/* close, we don't need the rest */
+	close(fd);
 
 	p = dnspkg;
 	if (ID(p) != cntr)
@@ -202,8 +189,6 @@ int dnsq(const char *a) {
 }
 
 int main(int argc, char *argv[]) {
-//#define DNSSERVER  "10.197.175.33"
-// haproxy-141, haproxy-142
 	if (adddnsserver("10.146.68.140") != 0)
 		return 1;
 	if (adddnsserver("10.196.69.200") != 0)
