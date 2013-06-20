@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
@@ -13,21 +12,6 @@
 
 
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
-struct dns_header {
-	unsigned short id;
-	unsigned int qr:1;
-	unsigned int opcode:4;
-	unsigned int aa:1;
-	unsigned int tc:1;
-	unsigned int rd:1;
-	unsigned int ra:1;
-	unsigned int z:3;
-	unsigned int rcode:4;
-	unsigned short qdcount;
-	unsigned short ancount;
-	unsigned short nscount;
-	unsigned short arcount;
-};
 
 #define ID(buf)      (ntohs(*(uint16_t*)(buf)))
 #define QR(buf)      ((buf[2] >> 7) & 0x01)
