@@ -113,10 +113,8 @@ int dnsq(const char *a) {
 
 	/* answer sections not necessary */
 
-	FD_ZERO(&fds);
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 		return 1;
-	FD_SET(fd, &fds);
 	len = (unsigned char)(p - dnspkg);  /* should always fit */
 	for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 		if (sendto(fd, dnspkg, len, 0,
@@ -124,11 +122,24 @@ int dnsq(const char *a) {
 			return 2;  /* TODO: fail only when all fail? */
 	}
 
-	/* wait half a second */
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+
+	/* wait 300ms, then retry */
 	tv.tv_sec = 0;
-	tv.tv_usec = 500000;
-	if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0)
-		return 3;  /* nothing happened */
+	tv.tv_usec = 300000;
+	if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
+		/* retry, just once */
+		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
+			if (sendto(fd, dnspkg, len, 0,
+						(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
+				return 2;  /* TODO: fail only when all fail? */
+		}
+		tv.tv_sec = 0;
+		tv.tv_usec = 200000;
+		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0)
+			return 3;  /* nothing happened */
+	}
 
 	saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
 	if (saddr_buf_len == -1)
