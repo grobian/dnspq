@@ -66,7 +66,7 @@ int adddnsserver(const char *server) {
 	return 0;
 }
 
-int dnsq(const char *a, struct in_addr *ret) {
+int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 	unsigned char dnspkg[512];
 	unsigned char *p = dnspkg;
 	char *ap;
@@ -189,7 +189,8 @@ int dnsq(const char *a, struct in_addr *ret) {
 	if (ID(p) != 1 /* QCLASS == IN */)
 		return 14;
 	p += 2;
-	p += 4; /* TTL */
+	*ttl = ntohs(*(uint32_t*)p);
+	p += 4;
 	len = ID(p);
 	p += 2;
 	if (len != 4)
@@ -201,14 +202,16 @@ int dnsq(const char *a, struct in_addr *ret) {
 
 int main(int argc, char *argv[]) {
 	struct in_addr ip;
-	if (adddnsserver("10.146.68.140") != 0)
-		return 1;
+	unsigned int ttl;
+	int ret;
+//	if (adddnsserver("10.146.68.140") != 0)
+//		return 1;
 	if (adddnsserver("10.196.69.200") != 0)
 		return 1;
 	//dnsq("elasticsearch-autocomplete-lhr4.lb-pool");
-	if (dnsq(argv[1], &ip) == 0) {
-		printf("%s\n", inet_ntoa(ip));
+	if ((ret = dnsq(argv[1], &ip, &ttl)) == 0) {
+		printf("%s (%us)\n", inet_ntoa(ip), ttl);
 		return 0;
 	}
-	return 1;
+	return ret;
 }
