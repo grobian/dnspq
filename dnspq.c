@@ -240,11 +240,8 @@ int main(int argc, char *argv[]) {
 	struct in_addr ip;
 	unsigned int ttl;
 	int ret;
-//	if (adddnsserver("10.146.68.140") != 0)
-//		return 1;
-	if (adddnsserver("10.196.69.200") != 0)
+	if (init() != 0)
 		return 1;
-	//dnsq("elasticsearch-autocomplete-lhr4.lb-pool");
 	if ((ret = dnsq(argv[1], &ip, &ttl)) == 0) {
 		printf("%s (%us)\n", inet_ntoa(ip), ttl);
 		return 0;
