@@ -43,16 +43,44 @@
 #define SET_ARCOUNT(buf, val) (*(uint16_t*)(buf+10) = htons(val))
 
 
-#define MAXSERVERS  8
+#ifndef MAXSERVERS
+# define MAXSERVERS  8
+#endif
+#ifndef RESOLV_CONF
+# define RESOLV_CONF "/etc/resolv.conf"
+#endif
 
 static uint16_t cntr = 0;
 static struct sockaddr_in *dnsservers[MAXSERVERS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 int init(void) {
+	FILE *resolvconf = NULL;
+	char buf[512];
+	int i;
+
 	/* TODO: check some resolv.conf */
 	if (dnsservers[0] != 0)
 		return 0;
-	return adddnsserver("10.196.68.24");
+
+	if ((resolvconf = fopen(RESOLV_CONF, "r")) == NULL)
+		return 1;
+	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
+		if (
+				buf[0] == 'n' &&
+				buf[1] == 'a' &&
+				buf[2] == 'm' &&
+				buf[3] == 'e' &&
+				buf[4] == 's' &&
+				buf[5] == 'e' &&
+				buf[6] == 'r' &&
+				buf[7] == 'v' &&
+				buf[8] == 'e' &&
+				buf[9] == 'r')
+		{
+			adddnsserver(buf + 11);
+		}
+	fclose(resolvconf);
+	return 0;
 }
 
 int adddnsserver(const char *server) {
