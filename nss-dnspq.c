@@ -27,7 +27,7 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 		host->h_length = sizeof(struct in_addr);
 		if (ttlp != NULL)
 			*ttlp = (int32_t)ttl;
-		if (*canonp != NULL)
+		if (canonp != NULL)
 			*canonp = buf + sizeof(struct in_addr);
 
 		*errnop = 0;
