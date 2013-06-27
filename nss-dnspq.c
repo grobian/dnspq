@@ -1,10 +1,12 @@
 
 /* GLIBC nss module */
 
+#include <string.h>
 #include <errno.h>
 #include <nss.h>
+#include <netdb.h>
 
-#include "dnspq.c"
+#include "dnspq.h"
 
 enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 		struct hostent *host, char *buf, size_t buflen,
@@ -15,6 +17,8 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 	if (buflen >= 6 + 2 * sizeof(void *) + sizeof(struct in_addr) &&
 			af == AF_INET && dnsq(name, (struct in_addr *)buf, &ttl) == 0)
 	{
+		init();
+
 		host->h_name = buf + sizeof(struct in_addr);
 		memcpy(host->h_name, "dnspq", 6);
 		host->h_aliases = (char **)buf + sizeof(struct in_addr) + 6;
