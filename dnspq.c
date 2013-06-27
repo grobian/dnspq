@@ -56,6 +56,7 @@ static struct sockaddr_in *dnsservers[MAXSERVERS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 int init(void) {
 	FILE *resolvconf = NULL;
 	char buf[512];
+	char *p;
 	int i;
 
 	/* TODO: check some resolv.conf */
@@ -77,6 +78,8 @@ int init(void) {
 				buf[8] == 'e' &&
 				buf[9] == 'r')
 		{
+			if ((p = strchr(buf + 11, '\n')) != NULL)
+				*p = '\0';
 			adddnsserver(buf + 11);
 		}
 	fclose(resolvconf);
