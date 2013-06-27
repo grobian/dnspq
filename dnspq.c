@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#include "dnspq.h"
 
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
 
@@ -46,6 +47,13 @@
 
 static uint16_t cntr = 0;
 static struct sockaddr_in *dnsservers[MAXSERVERS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+int init(void) {
+	/* TODO: check some resolv.conf */
+	if (dnsservers[0] != 0)
+		return 0;
+	return adddnsserver("10.196.68.24");
+}
 
 int adddnsserver(const char *server) {
 	int i;
