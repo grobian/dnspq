@@ -13,19 +13,21 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 		int *errnop, int *h_errnop, int32_t *ttlp, char **canonp)
 {
 	unsigned int ttl;
+	char sid;
 
-	if (buflen >= 6 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
+	if (buflen >= 8 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
 			af == AF_INET && init() == 0 &&
-			dnsq(name, (struct in_addr *)buf, &ttl) == 0)
+			dnsq(name, (struct in_addr *)buf, &ttl, &sid) == 0)
 	{
 		host->h_name = buf + sizeof(struct in_addr);
-		memcpy(host->h_name, "dnspq", 6);
+		memcpy(host->h_name, "dnspq-X", 8);
+		host->h_name[6] = '0' + sid;
 		host->h_addrtype = af;
 		host->h_length = sizeof(struct in_addr);
-		host->h_addr_list = (char **)buf + sizeof(struct in_addr) + 6;
+		host->h_addr_list = (char **)buf + sizeof(struct in_addr) + 8;
 		host->h_addr_list[0] = buf;
 		host->h_addr_list[1] = NULL;
-		host->h_aliases = (char **)buf + sizeof(struct in_addr) + 6 + 2 * sizeof(void *);
+		host->h_aliases = (char **)buf + sizeof(struct in_addr) + 8 + 2 * sizeof(void *);
 		host->h_aliases[0] = NULL;
 		if (ttlp != NULL)
 			*ttlp = (int32_t)ttl;
