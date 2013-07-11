@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/uio.h>
@@ -117,7 +118,10 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 	int i;
 	uint16_t qid;
 
-	cntr++; /* next sequence number */
+	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
+		cntr++;
+	if (USHRT_MAX - MAXSERVERS < cntr)  /* avoid having to deal with overflow */
+		cntr = 1;
 
 	/* header */
 	memset(p, 0, 4);  /* need zeros; macros below do or-ing due to bits */
@@ -194,7 +198,8 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 	close(fd);
 
 	qid = ID(p);
-	if (qid < cntr || qid > cntr + i - 1)
+	i--;
+	if (qid < cntr || qid > cntr + i)
 		return 7; /* message not matching our request id */
 	*serverid = qid - cntr;
 	if (QR(p) != 1)
