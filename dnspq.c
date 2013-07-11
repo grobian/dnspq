@@ -105,7 +105,7 @@ int adddnsserver(const char *server) {
 	return 0;
 }
 
-int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
+int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) {
 	unsigned char dnspkg[512];
 	unsigned char *p = dnspkg;
 	char *ap;
@@ -115,10 +115,13 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 	int fd;
 	struct timeval tv;
 	int i;
+	uint16_t qid;
+
+	cntr++; /* next sequence number */
 
 	/* header */
 	memset(p, 0, 4);  /* need zeros; macros below do or-ing due to bits */
-	SET_ID(p, ++cntr);
+	/* SET_ID is done per server */
 	SET_QR(p, 0 /* query */);
 	SET_OPCODE(p, 0 /* standard query */);
 	SET_AA(p, 0);
@@ -155,7 +158,9 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 		return 1;
 	len = (unsigned char)(p - dnspkg);  /* should always fit */
+	p = dnspkg;
 	for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
+		SET_ID(p, cntr + i);
 		if (sendto(fd, dnspkg, len, 0,
 					(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
 			return 2;  /* TODO: fail only when all fail? */
@@ -170,6 +175,7 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 	if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
 		/* retry, just once */
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
+			SET_ID(p, cntr + i);
 			if (sendto(fd, dnspkg, len, 0,
 						(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
 				return 2;  /* TODO: fail only when all fail? */
@@ -187,9 +193,10 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 	/* close, we don't need the rest */
 	close(fd);
 
-	p = dnspkg;
-	if (ID(p) != cntr)
+	qid = ID(p);
+	if (qid < cntr || qid > cntr + i - 1)
 		return 7; /* message not matching our request id */
+	*serverid = qid - cntr;
 	if (QR(p) != 1)
 		return 8; /* not a response */
 	if (OPCODE(p) != 0)
@@ -242,11 +249,12 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl) {
 int main(int argc, char *argv[]) {
 	struct in_addr ip;
 	unsigned int ttl;
+	char serverid;
 	int ret;
 	if (init() != 0)
 		return 1;
-	if ((ret = dnsq(argv[1], &ip, &ttl)) == 0) {
-		printf("%s (%us)\n", inet_ntoa(ip), ttl);
+	if ((ret = dnsq(argv[1], &ip, &ttl, &serverid)) == 0) {
+		printf("%s (%us/%d)\n", inet_ntoa(ip), ttl, serverid);
 		return 0;
 	}
 	return ret;
