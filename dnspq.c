@@ -47,7 +47,7 @@
 # define MAXSERVERS  8
 #endif
 #ifndef RESOLV_CONF
-# define RESOLV_CONF "/etc/resolv.conf"
+# define RESOLV_CONF "/etc/resolv-dnspq.conf"
 #endif
 
 static uint16_t cntr = 0;
