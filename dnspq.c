@@ -14,6 +14,8 @@
 
 #include "dnspq.h"
 
+#define VERSION "0.6"
+
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
 
 #define ID(buf)      (ntohs(*(uint16_t*)(buf)))
@@ -301,6 +303,10 @@ int main(int argc, char *argv[]) {
 	unsigned int ttl;
 	char serverid;
 	int ret;
+	if (argc == 1) {
+		printf("DNS Parallel Query v" VERSION "  <fabian.groffen@booking.com>\n");
+		return 0;
+	}
 	if (init() != 0)
 		return 1;
 	if ((ret = dnsq(argv[1], &ip, &ttl, &serverid)) == 0) {
