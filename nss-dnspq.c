@@ -20,7 +20,7 @@ static inline char check_domain_allowed(const char *name) {
 			for (; *p != '\0' && *p == *q; p++, q++)
 				;
 			if (*p == '\0')
-				return 0
+				return 0;
 		}
 	}
 	return 1;
