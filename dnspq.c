@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/uio.h>
@@ -49,6 +50,9 @@
 #endif
 #ifndef RESOLV_CONF
 # define RESOLV_CONF "/etc/resolv-dnspq.conf"
+#endif
+#ifndef MAX_RETRIES
+# define MAX_RETRIES  1
 #endif
 
 static uint16_t cntr = 0;
@@ -106,6 +110,9 @@ int adddnsserver(const char *server) {
 	return 0;
 }
 
+#define timediff(X, Y) \
+		(Y.tv_sec - X.tv_sec) * 1000 * 1000 + (Y.tv_usec - X.tv_usec)
+
 int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) {
 	unsigned char dnspkg[512];
 	unsigned char *p = dnspkg;
@@ -115,8 +122,13 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 	fd_set fds;
 	int fd;
 	struct timeval tv;
+	struct timeval begin, end;
 	int i;
+	int nums = 0;
 	uint16_t qid;
+	char retries = MAX_RETRIES;
+	suseconds_t maxtime = 500 * 1000;  /* 500ms, the max time we want to wait */
+	char err = 0;
 
 	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
 		cntr++;
@@ -163,90 +175,122 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 		return 1;
 	len = (unsigned char)(p - dnspkg);  /* should always fit */
 	p = dnspkg;
-	for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
-		SET_ID(p, cntr + i);
-		if (sendto(fd, dnspkg, len, 0,
-					(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
-			return 2;  /* TODO: fail only when all fail? */
-	}
 
-	FD_ZERO(&fds);
-	FD_SET(fd, &fds);
-
-	/* wait 300ms, then retry */
 	tv.tv_sec = 0;
-	tv.tv_usec = 300000;
-	if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
-		/* retry, just once */
+	tv.tv_usec = 0;  
+	gettimeofday(&begin, NULL);
+	do {
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
 			if (sendto(fd, dnspkg, len, 0,
-						(struct sockaddr *)dnsservers[i], sizeof(*dnsservers[i])) != len)
+						(struct sockaddr *)dnsservers[i],
+						sizeof(*dnsservers[i])) != len)
 				return 2;  /* TODO: fail only when all fail? */
 		}
-		tv.tv_sec = 0;
-		tv.tv_usec = 200000;
-		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0)
-			return 3;  /* nothing happened */
-	}
 
-	saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
-	if (saddr_buf_len == -1)
-		return 4;
+		/* wait for max 300ms */
+		tv.tv_usec = maxtime > 300 * 1000 ? 300 * 1000 : maxtime;
 
-	/* close, we don't need the rest */
-	close(fd);
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
+		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
+			if (retries-- > 0) {
+				err = 1;
+				continue;
+			} else {
+				break;
+			}
+		}
 
-	qid = ID(p);
-	i--;
-	if (qid < cntr || qid > cntr + i)
-		return 7; /* message not matching our request id */
-	*serverid = qid - cntr;
-	if (QR(p) != 1)
-		return 8; /* not a response */
-	if (OPCODE(p) != 0)
-		return 9; /* not a standard query */
-	switch (RCODE(p)) {
-		case 0: /* no error */
+		/* got a response, see if it's sane */
+		nums = i - 1;
+		i = 0;
+		do {
+			err = 0;
+			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
+			if (saddr_buf_len == -1) {
+				err = 4;
+				continue;
+			}
+
+			qid = ID(p);
+			if (qid < cntr || qid > cntr + nums) {
+				err = 7; /* message not matching our request id */
+				continue;
+			}
+			*serverid = qid - cntr;
+			if (QR(p) != 1) {
+				err = 8; /* not a response */
+				continue;
+			}
+			if (OPCODE(p) != 0) {
+				err = 9; /* not a standard query */
+				continue;
+			}
+			switch (RCODE(p)) {
+				case 0: /* no error */
+					break;
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+					/* we likely did something wrong */
+					err = 10;
+					continue;
+				default:
+					err = 11;
+					continue;
+			}
+			if (ANCOUNT(p) < 1) {
+				err = 12; /* we only support non-empty answers */
+				continue;
+			}
+
+			/* skip header + request */
+			p += len;
+
+			if ((*p | 3 << 6) == 3 << 6) {
+				/* compression pointer, skip two octets */
+				p += 2;
+			} else {
+				/* read labels */
+				while (*p != 0)
+					p += 1 + *p;
+				p++;
+			}
+			if (ID(p) != 1 /* QTYPE == A */) {
+				err = 13;
+				continue;
+			}
+			p += 2;
+			if (ID(p) != 1 /* QCLASS == IN */) {
+				err = 14;
+				continue;
+			}
+			p += 2;
+			*ttl = ntohs(*(uint32_t*)p);
+			p += 4;
+			len = ID(p);
+			p += 2;
+			if (len != 4) {
+				err = 15;
+				continue;
+			}
+			memcpy(ret, p, 4);
+
 			break;
-		case 1:
-		case 2:
-		case 3:
-		case 4:
-		case 5:
-			/* we likely did something wrong */
-			return 10;
-		default:
-			return 11;
-	}
-	if (ANCOUNT(p) < 1)
-		return 12; /* we only support non-empty answers */
+		} while(gettimeofday(&end, NULL) == 0 &&
+				(tv.tv_usec -= timediff(begin, end)) > 0 &&
+				select(fd + 1, &fds, NULL, NULL, &tv) <= 0);
+	} while(err != 0 && i++ <= nums &&
+			gettimeofday(&end, NULL) == 0 &&
+			(maxtime -= timediff(begin, end)) > 0);
+	if (err != 0)
+		return err;
 
-	/* skip header + request */
-	p += len;
-
-	if ((*p | 3 << 6) == 3 << 6) {
-		/* compression pointer, skip two octets */
-		p += 2;
-	} else {
-		/* read labels */
-		while (*p != 0)
-			p += 1 + *p;
-		p++;
-	}
-	if (ID(p) != 1 /* QTYPE == A */)
-		return 13;
-    p += 2;
-	if (ID(p) != 1 /* QCLASS == IN */)
-		return 14;
-	p += 2;
-	*ttl = ntohs(*(uint32_t*)p);
-	p += 4;
-	len = ID(p);
-	p += 2;
-	if (len != 4)
-		return 15;
-	memcpy(ret, p, 4);
+	/* close, we don't need anything following after this point */
+	close(fd);
 
 	return 0;
 }
