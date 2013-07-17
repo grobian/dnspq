@@ -8,6 +8,27 @@
 
 #include "dnspq.h"
 
+#ifdef NSS_DNSPQ_RESTRICT_DOMAIN
+# define domain_is_allowed(X)  check_domain_allowed(X)
+
+static inline char check_domain_allowed(const char *name) {
+	size_t l = strlen(name);
+	const char *p, *q = NSS_DNSPQ_RESTRICT_DOMAIN;
+	if (l > sizeof(NSS_DNSPQ_RESTRICT_DOMAIN)) {
+		p = name + l - sizeof(NSS_DNSPQ_RESTRICT_DOMAIN) - 1 - 1;
+		if (*p++ == '.') {
+			for (; *p != '\0' && *p == *q; p++, q++)
+				;
+			if (*p == '\0')
+				return 0
+		}
+	}
+	return 1;
+}
+#else
+# define domain_is_allowed(X)  1
+#endif
+
 enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 		struct hostent *host, char *buf, size_t buflen,
 		int *errnop, int *h_errnop, int32_t *ttlp, char **canonp)
@@ -15,7 +36,8 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 	unsigned int ttl;
 	char sid;
 
-	if (buflen >= 8 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
+	if (domain_is_allowed(name) &&
+			buflen >= 8 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
 			af == AF_INET && init() == 0 &&
 			dnsq(name, (struct in_addr *)buf, &ttl, &sid) == 0)
 	{

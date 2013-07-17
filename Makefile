@@ -1,4 +1,4 @@
-CFLAGS ?= -O2 -Wall -fPIC
+CFLAGS ?= -O2 -Wall -fPIC -DNSS_DNSPQ_RESTRICT_DOMAIN=\"lb-pool\"
 
 dnspq: dnspq.o
 	$(CC) -o $@ $(LDFLAGS) $<
