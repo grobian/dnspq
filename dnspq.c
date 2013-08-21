@@ -195,9 +195,9 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 		FD_SET(fd, &fds);
 		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
 			if (retries-- > 0) {
-				err = 1;
 				continue;
 			} else {
+				err = 1;
 				break;
 			}
 		}
@@ -206,7 +206,6 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 		nums = i - 1;
 		i = 0;
 		do {
-			err = 0;
 			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
 			if (saddr_buf_len == -1) {
 				err = 4;
@@ -277,13 +276,15 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 				err = 15;
 				continue;
 			}
+
+			err = 0;
 			memcpy(ret, p, 4);
 
 			break;
-		} while(gettimeofday(&end, NULL) == 0 &&
+		} while(i++ <= nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
 				select(fd + 1, &fds, NULL, NULL, &tv) <= 0);
-	} while(err != 0 && i++ <= nums &&
+	} while(err != 0 &&
 			gettimeofday(&end, NULL) == 0 &&
 			(maxtime -= timediff(begin, end)) > 0);
 	if (err != 0)
