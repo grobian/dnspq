@@ -236,7 +236,7 @@ int dnsq(
 			memcpy(ret, p, 4);
 
 			break;
-		} while(i++ <= nums && gettimeofday(&end, NULL) == 0 &&
+		} while (i++ < nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
 				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
 	} while (err != 0 && err != 13 &&
