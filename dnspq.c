@@ -183,11 +183,14 @@ int dnsq(
 					break;
 				case 1:
 				case 2:
-				case 3:
 				case 4:
 				case 5:
 					/* we likely did something wrong */
 					err = 10;
+					continue;
+				case 3:
+					/* NXDOMAIN */
+					err = 13;
 					continue;
 				default:
 					err = 11;
@@ -236,7 +239,7 @@ int dnsq(
 		} while(i++ <= nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
 				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
-	} while(err != 0 &&
+	} while (err != 0 && err != 13 &&
 			gettimeofday(&end, NULL) == 0 &&
 			(maxtime -= timediff(begin, end)) > 0);
 	if (err != 0)
