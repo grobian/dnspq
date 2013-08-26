@@ -14,7 +14,7 @@
 
 #include "dnspq.h"
 
-#define VERSION "0.6"
+#define VERSION "0.7"
 
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
 
@@ -50,72 +50,22 @@
 #ifndef MAXSERVERS
 # define MAXSERVERS  8
 #endif
-#ifndef RESOLV_CONF
-# define RESOLV_CONF "/etc/resolv-dnspq.conf"
-#endif
 #ifndef MAX_RETRIES
 # define MAX_RETRIES  1
 #endif
 
 static uint16_t cntr = 0;
-static struct sockaddr_in *dnsservers[MAXSERVERS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
-int init(void) {
-	FILE *resolvconf = NULL;
-	char buf[512];
-	char *p;
-	int i;
-
-	/* TODO: check some resolv.conf */
-	if (dnsservers[0] != 0)
-		return 0;
-
-	if ((resolvconf = fopen(RESOLV_CONF, "r")) == NULL)
-		return 1;
-	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
-		if (
-				buf[0] == 'n' &&
-				buf[1] == 'a' &&
-				buf[2] == 'm' &&
-				buf[3] == 'e' &&
-				buf[4] == 's' &&
-				buf[5] == 'e' &&
-				buf[6] == 'r' &&
-				buf[7] == 'v' &&
-				buf[8] == 'e' &&
-				buf[9] == 'r')
-		{
-			if ((p = strchr(buf + 11, '\n')) != NULL)
-				*p = '\0';
-			adddnsserver(buf + 11);
-		}
-	fclose(resolvconf);
-	return 0;
-}
-
-int adddnsserver(const char *server) {
-	int i;
-	struct sockaddr_in *dnsserver;
-
-	/* find free slot */
-	for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++)
-		;
-	if (i == MAXSERVERS)
-		return 1;
-
-	dnsserver = dnsservers[i] = malloc(sizeof(*dnsserver));
-	if (inet_pton(AF_INET, server, &(dnsserver->sin_addr)) <= 0)
-		return 2;
-	dnsserver->sin_family = AF_INET;
-	dnsserver->sin_port = htons(53);
-
-	return 0;
-}
 
 #define timediff(X, Y) \
 		(Y.tv_sec - X.tv_sec) * 1000 * 1000 + (Y.tv_usec - X.tv_usec)
 
-int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) {
+int dnsq(
+		struct sockaddr_in* const dnsservers[],
+		const char *a,
+		struct in_addr *ret,
+		unsigned int *ttl,
+		char *serverid)
+{
 	unsigned char dnspkg[512];
 	unsigned char *p = dnspkg;
 	char *ap;
@@ -285,7 +235,7 @@ int dnsq(const char *a, struct in_addr *ret, unsigned int *ttl, char *serverid) 
 			break;
 		} while(i++ <= nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
-				select(fd + 1, &fds, NULL, NULL, &tv) <= 0);
+				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
 	} while(err != 0 &&
 			gettimeofday(&end, NULL) == 0 &&
 			(maxtime -= timediff(begin, end)) > 0);
@@ -303,13 +253,47 @@ int main(int argc, char *argv[]) {
 	unsigned int ttl;
 	char serverid;
 	int ret;
+	FILE *resolvconf = NULL;
+	char buf[512];
+	char *p;
+	int i;
+	struct sockaddr_in *dnsservers[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	struct sockaddr_in *dnsserver;
+	int dnsi = 0;
+
 	if (argc == 1) {
 		printf("DNS Parallel Query v" VERSION " (" GIT_VERSION ")  <fabian.groffen@booking.com>\n");
 		return 0;
 	}
-	if (init() != 0)
+
+	if ((resolvconf = fopen("/etc/resolv.conf" /* FIXME */, "r")) == NULL)
 		return 1;
-	if ((ret = dnsq(argv[1], &ip, &ttl, &serverid)) == 0) {
+	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
+		if (
+				buf[0] == 'n' &&
+				buf[1] == 'a' &&
+				buf[2] == 'm' &&
+				buf[3] == 'e' &&
+				buf[4] == 's' &&
+				buf[5] == 'e' &&
+				buf[6] == 'r' &&
+				buf[7] == 'v' &&
+				buf[8] == 'e' &&
+				buf[9] == 'r')
+		{
+			if (dnsi == sizeof(dnsservers) - 1)
+				break;
+			if ((p = strchr(buf + 11, '\n')) != NULL)
+				*p = '\0';
+			dnsserver = dnsservers[dnsi++] = malloc(sizeof(*dnsserver));
+			if (inet_pton(AF_INET, buf + 11, &(dnsserver->sin_addr)) <= 0)
+				return 2;
+			dnsserver->sin_family = AF_INET;
+			dnsserver->sin_port = htons(53);
+		}
+	fclose(resolvconf);
+
+	if ((ret = dnsq(dnsservers, argv[1], &ip, &ttl, &serverid)) == 0) {
 		printf("%s (%us/%d)\n", inet_ntoa(ip), ttl, serverid);
 		return 0;
 	}
