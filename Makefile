@@ -1,6 +1,6 @@
 CFLAGS ?= -O2 -Wall
 
-PQCFLAGS = -fPIC -DNSS_DNSPQ_RESTRICT_DOMAIN=\"lb-pool\"
+PQCFLAGS = -fPIC
 
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always)
 PQCFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"

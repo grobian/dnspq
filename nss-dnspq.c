@@ -1,23 +1,143 @@
 
 /* GLIBC nss module */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <nss.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 #include "dnspq.h"
 
-#ifdef NSS_DNSPQ_RESTRICT_DOMAIN
-# define domain_is_allowed(X)  check_domain_allowed(X)
+#ifndef RESOLV_CONF
+#define RESOLV_CONF "/etc/resolv-dnspq.conf"
+#endif
 
-static inline char check_domain_allowed(const char *name) {
-	size_t l = strlen(name);
-	const char *p, *q = NSS_DNSPQ_RESTRICT_DOMAIN;
-	if (l > sizeof(NSS_DNSPQ_RESTRICT_DOMAIN)) {
-		p = name + l - sizeof(NSS_DNSPQ_RESTRICT_DOMAIN) - 1 - 1;
+typedef struct _domaingroup {
+	char *domain;
+	struct _domaingroup *next;
+	struct sockaddr_in **dnsservers;
+} domaingroup;
+
+static domaingroup *rpool = NULL;
+
+/* library init */
+/* read the config file and build up the structure per domain */
+__attribute__((constructor)) void readconfig(void) {
+	FILE *resolvconf = NULL;
+	int i, j, k;
+	char buf[1024];
+	domaingroup *lastdg = NULL;
+	char *p = NULL;
+	struct sockaddr_in *dnsservers[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	struct sockaddr_in *dnsserver = NULL;
+	int dnsi = 0;
+	char *fps[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	int port;
+
+	/* .domain ip:port ip:port ...
+	 * or
+	 * nameserver ip 
+	 *
+	 * The first form creates a group of DNS servers to query for the
+	 * domain.  The leading . is mandatory here (to distinguish easily).
+	 * The second form is to facilitate traditional /etc/resolv.conf
+	 * files.  Interleaving both forms is NOT supported.
+	 */
+
+	if ((resolvconf = fopen(RESOLV_CONF, "r")) == NULL)
+		return;
+	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
+		if (
+				buf[0] == 'n' &&
+				buf[1] == 'a' &&
+				buf[2] == 'm' &&
+				buf[3] == 'e' &&
+				buf[4] == 's' &&
+				buf[5] == 'e' &&
+				buf[6] == 'r' &&
+				buf[7] == 'v' &&
+				buf[8] == 'e' &&
+				buf[9] == 'r' &&
+				buf[10] == ' ')
+		{ /* traditional /etc/resolv.conf mode */
+			if (dnsi == sizeof(dnsservers) - 1)
+				continue;
+			if ((p = strchr(buf + 11, '\n')) != NULL)
+				*p = '\0';
+			dnsserver = dnsservers[dnsi++] = malloc(sizeof(*dnsserver));
+			if (inet_pton(AF_INET, buf + 11, &(dnsserver->sin_addr)) <= 0) {
+				free(dnsserver);
+				dnsserver = dnsservers[dnsi--] = NULL;
+				continue;
+			}
+			dnsserver->sin_family = AF_INET;
+			dnsserver->sin_port = htons(53);
+		} else if (buf[0] == '.') { /* group mode */
+			p = buf + 1;
+			dnsi = 0;
+			while (dnsi < sizeof(fps) && (p = strchr(p, ' ')) != NULL) {
+				*p++ = '\0';
+				fps[dnsi] = p;
+				dnsi++;
+			}
+			if (dnsi == 0)
+				continue;
+			if ((p = strchr(fps[dnsi - 1], '\n')) != NULL)
+				*p = '\0';
+			if (lastdg == NULL) {
+				lastdg = rpool = malloc(sizeof(domaingroup));
+			} else {
+				lastdg = lastdg->next = malloc(sizeof(domaingroup));
+			}
+			lastdg->domain = strdup(buf + 1);
+			lastdg->next = NULL;
+			lastdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
+			for (j = 0, k = 0; j < dnsi; j++) {
+				dnsserver = lastdg->dnsservers[k++] = malloc(sizeof(*dnsserver));
+				port = 0;
+				if ((p = strchr(fps[j], ':')) != NULL) {
+					*p++ = '\0';
+					port = atoi(p);
+				}
+				if (inet_pton(AF_INET, fps[j], &(dnsserver->sin_addr)) <= 0) {
+					free(dnsserver);
+					dnsserver = lastdg->dnsservers[--k] = NULL;
+					continue;
+				}
+				dnsserver->sin_family = AF_INET;
+				dnsserver->sin_port = htons(port == 0 ? 53 : port);
+			}
+			lastdg->dnsservers[k] = NULL;
+			dnsi = 0;
+		}
+	fclose(resolvconf);
+
+	if (dnsi > 0) {
+		/* create fallback group for traditional mode */
+		if (lastdg == NULL) {
+			lastdg = rpool = malloc(sizeof(domaingroup));
+		} else {
+			lastdg = lastdg->next = malloc(sizeof(domaingroup));
+		}
+		lastdg->domain = NULL;
+		lastdg->next = NULL;
+		lastdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
+		memcpy(lastdg->dnsservers, dnsservers, sizeof(*dnsserver) * (dnsi + 1));
+	}
+}
+
+/* strcmp at the tail of a string, either start, or from a dot */
+static inline int tailcmp(const char *haystack, const char *needle) {
+	size_t nl = strlen(needle);
+	size_t hl = strlen(haystack);
+	const char *p;
+	if (nl < hl) {
+		p = haystack + hl - nl - 1;
 		if (*p++ == '.') {
-			for (; *p != '\0' && *p == *q; p++, q++)
+			for (; *p != '\0' && *p == *needle; p++, needle++)
 				;
 			if (*p == '\0')
 				return 0;
@@ -25,9 +145,21 @@ static inline char check_domain_allowed(const char *name) {
 	}
 	return 1;
 }
-#else
-# define domain_is_allowed(X)  1
-#endif
+
+/* helper function to locate the set of nameservers for the given domain */
+static inline char get_dnss_for_domain(
+		struct sockaddr_in ***dnsservers,
+		const char *name)
+{
+	domaingroup *w;
+	for (w = rpool; w != NULL; w = w->next)
+		if (w->domain == NULL || tailcmp(name, w->domain) == 0) {
+			*dnsservers = w->dnsservers;
+			return 1;
+		}
+	return 0;
+
+}
 
 enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 		struct hostent *host, char *buf, size_t buflen,
@@ -35,11 +167,12 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 {
 	unsigned int ttl;
 	char sid;
+	struct sockaddr_in **dnsservers = NULL;
 
-	if (domain_is_allowed(name) &&
+	if (af == AF_INET &&
 			buflen >= 8 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
-			af == AF_INET && init() == 0 &&
-			dnsq(name, (struct in_addr *)buf, &ttl, &sid) == 0)
+			get_dnss_for_domain(&dnsservers, name) &&
+			dnsq(dnsservers, name, (struct in_addr *)buf, &ttl, &sid) == 0)
 	{
 		host->h_name = buf + sizeof(struct in_addr);
 		memcpy(host->h_name, "dnspq-X", 8);
