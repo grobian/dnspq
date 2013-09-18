@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <nss.h>
@@ -18,6 +19,7 @@
 typedef struct _domaingroup {
 	char *domain;
 	struct _domaingroup *next;
+	size_t poolcount;
 	struct sockaddr_in **dnsservers;
 } domaingroup;
 
@@ -30,12 +32,17 @@ __attribute__((constructor)) void readconfig(void) {
 	int i, j, k;
 	char buf[1024];
 	domaingroup *lastdg = NULL;
+	domaingroup *tdg = NULL;
 	char *p = NULL;
 	struct sockaddr_in *dnsservers[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	struct sockaddr_in *dnsserver = NULL;
 	int dnsi = 0;
 	char *fps[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int port;
+
+	/* don't use time to avoid same sequence when multiple processes
+	 * start at the same time */
+	srand(getpid());
 
 	/* .domain ip:port ip:port ...
 	 * or
@@ -87,13 +94,33 @@ __attribute__((constructor)) void readconfig(void) {
 				continue;
 			if ((p = strchr(fps[dnsi - 1], '\n')) != NULL)
 				*p = '\0';
+			k = 0;
 			if (lastdg == NULL) {
 				lastdg = rpool = malloc(sizeof(domaingroup));
+				lastdg->next = NULL;
 			} else {
-				lastdg = lastdg->next = malloc(sizeof(domaingroup));
+				for (lastdg = rpool; lastdg->next != NULL; lastdg = lastdg->next)
+					if (lastdg->domain != NULL &&
+							strcmp(lastdg->domain, buf + 1) == 0)
+					{
+						/* randomise insertion */
+						if ((k = lastdg->poolcount++) > 1) {
+							for (j = 0; j < rand() % k; j++)
+								lastdg = lastdg->next;
+						}
+						break;
+					}
+				tdg = malloc(sizeof(domaingroup));
+				tdg->next = lastdg->next;
+				lastdg = lastdg->next = tdg;
 			}
-			lastdg->domain = strdup(buf + 1);
-			lastdg->next = NULL;
+			if (k == 0) {
+				lastdg->domain = strdup(buf + 1);
+				lastdg->poolcount = 1;
+			} else {
+				lastdg->domain = NULL;
+				lastdg->poolcount = 0;
+			}
 			lastdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
 			for (j = 0, k = 0; j < dnsi; j++) {
 				dnsserver = lastdg->dnsservers[k++] = malloc(sizeof(*dnsserver));
@@ -152,11 +179,21 @@ static inline char get_dnss_for_domain(
 		const char *name)
 {
 	domaingroup *w;
-	for (w = rpool; w != NULL; w = w->next)
-		if (w->domain == NULL || tailcmp(name, w->domain) == 0) {
+	int i;
+	for (w = rpool; w != NULL; w = w->next) {
+		if (w->domain == NULL) {
+			*dnsservers = w->dnsservers;
+			return 1;
+		} else if (tailcmp(name, w->domain) == 0) {
+			if (w->poolcount > 1) {
+				w->next->poolcount = w->next->poolcount + 1 % w->poolcount;
+				for (i = 0; i < w->next->poolcount; i++)
+					w = w->next;
+			}
 			*dnsservers = w->dnsservers;
 			return 1;
 		}
+	}
 	return 0;
 
 }
