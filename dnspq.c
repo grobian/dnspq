@@ -14,7 +14,7 @@
 
 #include "dnspq.h"
 
-#define VERSION "0.7"
+#define VERSION "0.8"
 
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
 
