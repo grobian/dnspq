@@ -192,6 +192,9 @@ static inline char get_dnss_for_domain(
 			}
 			*dnsservers = w->dnsservers;
 			return 1;
+		} else if (w->poolcount > 1) {
+			for (i = 0; i < w->poolcount; i++)
+				w = w->next;
 		}
 	}
 	return 0;
