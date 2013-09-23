@@ -30,7 +30,7 @@ static domaingroup *rpool = NULL;
 #ifndef DEBUG
 __attribute__((constructor))
 #endif
-static void readconfig(void) {
+void readconfig(void) {
 	FILE *resolvconf = NULL;
 	int j, k;
 	char buf[1024];
