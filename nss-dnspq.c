@@ -29,7 +29,7 @@ static domaingroup *rpool = NULL;
 /* read the config file and build up the structure per domain */
 __attribute__((constructor)) void readconfig(void) {
 	FILE *resolvconf = NULL;
-	int i, j, k;
+	int j, k;
 	char buf[1024];
 	domaingroup *lastdg = NULL;
 	domaingroup *tdg = NULL;
