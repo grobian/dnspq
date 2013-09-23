@@ -25,6 +25,22 @@ typedef struct _domaingroup {
 
 static domaingroup *rpool = NULL;
 
+#ifdef DEBUG
+void debugconfig(void) {
+	domaingroup *walk;
+	struct sockaddr_in *swalk;
+	int i;
+
+	for (walk = rpool; walk != NULL; walk = walk->next) {
+		printf("\"%s\": %zd\n",
+				walk->domain ? walk->domain : "(cont)", walk->poolcount);
+		for (i = 0, swalk = walk->dnsservers[i]; swalk != NULL; swalk = walk->dnsservers[++i]) {
+			printf("    %s:%d\n", inet_ntoa(swalk->sin_addr), htons(swalk->sin_port));
+		}
+	}
+}
+#endif
+
 /* library init */
 /* read the config file and build up the structure per domain */
 #ifndef DEBUG
