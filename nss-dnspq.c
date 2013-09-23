@@ -56,7 +56,7 @@ __attribute__((constructor)) void readconfig(void) {
 
 	if ((resolvconf = fopen(RESOLV_CONF, "r")) == NULL)
 		return;
-	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
+	while (fgets(buf, sizeof(buf), resolvconf) != NULL)
 		if (
 				buf[0] == 'n' &&
 				buf[1] == 'a' &&
