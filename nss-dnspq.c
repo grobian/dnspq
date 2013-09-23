@@ -50,8 +50,8 @@ void readconfig(void) {
 	FILE *resolvconf = NULL;
 	int j, k;
 	char buf[1024];
-	domaingroup *lastdg = NULL;
 	domaingroup *tdg = NULL;
+	domaingroup *ndg = NULL;
 	char *p = NULL;
 	struct sockaddr_in *dnsservers[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	struct sockaddr_in *dnsserver = NULL;
@@ -114,35 +114,38 @@ void readconfig(void) {
 			if ((p = strchr(fps[dnsi - 1], '\n')) != NULL)
 				*p = '\0';
 			k = 0;
-			if (lastdg == NULL) {
-				lastdg = rpool = malloc(sizeof(domaingroup));
-				lastdg->next = NULL;
+			if (rpool == NULL) {
+				tdg = rpool = malloc(sizeof(domaingroup));
+				tdg->next = NULL;
 			} else {
-				for (lastdg = rpool; lastdg->next != NULL; lastdg = lastdg->next)
-					if (lastdg->domain != NULL &&
-							strcmp(lastdg->domain, buf + 1) == 0)
+				for (tdg = rpool; ; tdg = tdg->next) {
+					if (tdg->domain != NULL &&
+							strcmp(tdg->domain, buf + 1) == 0)
 					{
 						/* randomise insertion */
-						if ((k = lastdg->poolcount++) > 1) {
-							for (j = 0; j < rand() % k; j++)
-								lastdg = lastdg->next;
+						if ((k = tdg->poolcount++) > 1) {
+							for (j = rand() % k; j > 0; j--)
+								tdg = tdg->next;
 						}
 						break;
 					}
-				tdg = malloc(sizeof(domaingroup));
-				tdg->next = lastdg->next;
-				lastdg = lastdg->next = tdg;
+					if (tdg->next == NULL)
+						break;
+				}
+				ndg = malloc(sizeof(domaingroup));
+				ndg->next = tdg->next;
+				tdg = tdg->next = ndg;
 			}
 			if (k == 0) {
-				lastdg->domain = strdup(buf + 1);
-				lastdg->poolcount = 1;
+				tdg->domain = strdup(buf + 1);
+				tdg->poolcount = 1;
 			} else {
-				lastdg->domain = NULL;
-				lastdg->poolcount = 0;
+				tdg->domain = NULL;
+				tdg->poolcount = 0;
 			}
-			lastdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
+			tdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
 			for (j = 0, k = 0; j < dnsi; j++) {
-				dnsserver = lastdg->dnsservers[k++] = malloc(sizeof(*dnsserver));
+				dnsserver = tdg->dnsservers[k++] = malloc(sizeof(*dnsserver));
 				port = 0;
 				if ((p = strchr(fps[j], ':')) != NULL) {
 					*p++ = '\0';
@@ -150,28 +153,30 @@ void readconfig(void) {
 				}
 				if (inet_pton(AF_INET, fps[j], &(dnsserver->sin_addr)) <= 0) {
 					free(dnsserver);
-					dnsserver = lastdg->dnsservers[--k] = NULL;
+					dnsserver = tdg->dnsservers[--k] = NULL;
 					continue;
 				}
 				dnsserver->sin_family = AF_INET;
 				dnsserver->sin_port = htons(port == 0 ? 53 : port);
 			}
-			lastdg->dnsservers[k] = NULL;
+			tdg->dnsservers[k] = NULL;
 			dnsi = 0;
 		}
 	fclose(resolvconf);
 
 	if (dnsi > 0) {
 		/* create fallback group for traditional mode */
-		if (lastdg == NULL) {
-			lastdg = rpool = malloc(sizeof(domaingroup));
+		if (rpool == NULL) {
+			tdg = rpool = malloc(sizeof(domaingroup));
 		} else {
-			lastdg = lastdg->next = malloc(sizeof(domaingroup));
+			for (tdg = rpool; tdg->next != NULL; tdg = tdg->next)
+				;
+			tdg = tdg->next = malloc(sizeof(domaingroup));
 		}
-		lastdg->domain = NULL;
-		lastdg->next = NULL;
-		lastdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
-		memcpy(lastdg->dnsservers, dnsservers, sizeof(*dnsserver) * (dnsi + 1));
+		tdg->domain = NULL;
+		tdg->next = NULL;
+		tdg->dnsservers = malloc(sizeof(*dnsserver) * (dnsi + 1));
+		memcpy(tdg->dnsservers, dnsservers, sizeof(*dnsserver) * (dnsi + 1));
 	}
 }
 
