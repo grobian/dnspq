@@ -27,7 +27,10 @@ static domaingroup *rpool = NULL;
 
 /* library init */
 /* read the config file and build up the structure per domain */
-__attribute__((constructor)) void readconfig(void) {
+#ifndef DEBUG
+__attribute__((constructor))
+#endif
+static void readconfig(void) {
 	FILE *resolvconf = NULL;
 	int j, k;
 	char buf[1024];
