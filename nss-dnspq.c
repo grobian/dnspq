@@ -202,22 +202,25 @@ static inline char get_dnss_for_domain(
 		struct sockaddr_in ***dnsservers,
 		const char *name)
 {
-	domaingroup *w;
+	domaingroup *w = rpool;
 	int i;
-	for (w = rpool; w != NULL; w = w->next) {
+
+	while (w != NULL) {
 		if (w->domain == NULL) {
 			*dnsservers = w->dnsservers;
 			return 1;
 		} else if (tailcmp(name, w->domain) == 0) {
 			if (w->poolcount > 1) {
-				w->next->poolcount = w->next->poolcount + 1 % w->poolcount;
-				for (i = 0; i < w->next->poolcount; i++)
+				i = w->next->poolcount;
+				w->next->poolcount = (w->next->poolcount + 1) % w->poolcount;
+				for (; i > 0; i--)
 					w = w->next;
 			}
 			*dnsservers = w->dnsservers;
 			return 1;
-		} else if (w->poolcount > 1) {
-			for (i = 0; i < w->poolcount; i++)
+		} else {
+			/* skip over entire pool */
+			for (i = w->poolcount; i > 0; i--)
 				w = w->next;
 		}
 	}
