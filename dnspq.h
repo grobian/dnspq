@@ -1,4 +1,6 @@
 
+#define VERSION "0.8"
+
 int dnsq(
 		struct sockaddr_in* const dnsservers[],
 		const char *a,
