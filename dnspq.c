@@ -231,7 +231,7 @@ int dnsq(
 				p++;
 			}
 			if (ID(p) != 1 /* QTYPE == A */) {
-				err = 13;
+				err = 16;
 				continue;
 			}
 			p += 2;
