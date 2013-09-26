@@ -213,6 +213,11 @@ int dnsq(
 				continue;
 			}
 
+			if (saddr_buf_len <= len) {
+				err = 14;
+				continue;
+			}
+
 			/* skip header + request */
 			p += len;
 
