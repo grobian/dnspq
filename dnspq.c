@@ -250,8 +250,6 @@ int dnsq(
 	} while (err != 0 && err != 13 &&
 			gettimeofday(&end, NULL) == 0 &&
 			(maxtime -= timediff(begin, end)) > 0);
-	if (err != 0)
-		return err;
 
 	/* close, we don't need anything following after this point */
 	close(fd);
