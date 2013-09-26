@@ -130,12 +130,12 @@ int dnsq(
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 		return 1;
 	len = p - dnspkg;
-	p = dnspkg;
 
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;  
 	gettimeofday(&begin, NULL);
 	do {
+		p = dnspkg;
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
 			if (sendto(fd, dnspkg, len, 0,
@@ -168,6 +168,7 @@ int dnsq(
 				continue;
 			}
 
+			p = dnspkg;
 			qid = ID(p);
 			if (qid < cntr || qid > cntr + nums) {
 				err = 7; /* message not matching our request id */
