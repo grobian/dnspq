@@ -179,6 +179,8 @@ int dnsq(
 				err = 7; /* message not matching our request id */
 				continue;
 			}
+			/* ID matches, assume from a server we sent to */
+			i++;
 			*serverid = qid - cntr;
 			if (QR(p) != 1) {
 				err = 8; /* not a response */
@@ -246,7 +248,7 @@ int dnsq(
 			memcpy(ret, p, 4);
 
 			break;
-		} while (i++ < nums && gettimeofday(&end, NULL) == 0 &&
+		} while (i < nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
 				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
 #if LOGGING > 2
