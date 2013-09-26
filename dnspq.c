@@ -71,7 +71,7 @@ int dnsq(
 	unsigned char dnspkg[512];
 	unsigned char *p = dnspkg;
 	char *ap;
-	unsigned char len;
+	size_t len;
 	int saddr_buf_len;
 	fd_set fds;
 	int fd;
@@ -108,15 +108,17 @@ int dnsq(
 
 	/* question section */
 	while ((ap = strchr(a, '.')) != NULL) {
-		len = (unsigned char)(ap - a);
-		*p++ = len;
+		len = ap - a;
+		if (len > 255)  /* proto spec */
+			return 1;
+		*p++ = (unsigned char)len;
 		memcpy(p, a, len);
 		p += len;
 		a = ap + 1;
 	}
-	len = (unsigned char)strlen(a);  /* truncation, hmm ... */
+	len = strlen(a);
 	*p++ = len;
-	memcpy(p, a, len + 1);
+	memcpy(p, a, len + 1);  /* always fits: 512 - 12 > 255 */
 	p += len + 1;  /* including the trailing null label */
 	SET_ID(p, 1 /* QTYPE == A */);
 	p += 2;
@@ -127,7 +129,7 @@ int dnsq(
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 		return 1;
-	len = (unsigned char)(p - dnspkg);  /* should always fit */
+	len = p - dnspkg;
 	p = dnspkg;
 
 	tv.tv_sec = 0;
