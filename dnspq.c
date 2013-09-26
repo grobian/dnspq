@@ -161,6 +161,7 @@ int dnsq(
 				break;
 			}
 		}
+		FD_CLR(fd, &fds);
 
 		/* got a response, see if it's sane */
 		nums = i - 1;
