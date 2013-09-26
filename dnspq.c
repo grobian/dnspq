@@ -242,12 +242,11 @@ int dnsq(
 			p += 2;
 			*ttl = ntohs(*(uint32_t*)p);
 			p += 4;
-			len = ID(p);
-			p += 2;
-			if (len != 4) {
+			if (ID(p) != 4) {
 				err = 15;
 				continue;
 			}
+			p += 2;
 
 			err = 0;
 			memcpy(ret, p, 4);
