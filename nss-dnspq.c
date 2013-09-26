@@ -10,6 +10,10 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+#ifdef LOGGING
+#include <syslog.h>
+#endif
+
 #include "dnspq.h"
 
 #ifndef RESOLV_CONF
@@ -58,6 +62,11 @@ void readconfig(void) {
 	int dnsi = 0;
 	char *fps[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int port;
+
+#ifdef LOGGING
+	openlog("dnspq", LOG_PID, LOG_USER);
+	syslog(LOG_INFO, "nss-dnspq.so.2 v" VERSION " (" GIT_VERSION ") has been invoked");
+#endif
 
 	/* don't use time to avoid same sequence when multiple processes
 	 * start at the same time */

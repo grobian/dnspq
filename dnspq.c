@@ -12,6 +12,10 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#ifdef LOGGING
+#include <syslog.h>
+#endif
+
 #include "dnspq.h"
 
 /* http://www.freesoft.org/CIE/RFC/1035/40.htm */
@@ -237,6 +241,10 @@ int dnsq(
 		} while (i++ < nums && gettimeofday(&end, NULL) == 0 &&
 				(tv.tv_usec -= timediff(begin, end)) > 0 &&
 				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
+#if LOGGING > 2
+		if (err != 0)
+			syslog(LOG_INFO, "retrying due to error, code %d", err);
+#endif
 	} while (err != 0 && err != 13 &&
 			gettimeofday(&end, NULL) == 0 &&
 			(maxtime -= timediff(begin, end)) > 0);
@@ -245,6 +253,13 @@ int dnsq(
 
 	/* close, we don't need anything following after this point */
 	close(fd);
+
+	if (err != 0) {
+#ifdef LOGGING
+		syslog(LOG_INFO, "error while resolving %s, code %d", a, err);
+#endif
+		return err;
+	}
 
 	return 0;
 }
