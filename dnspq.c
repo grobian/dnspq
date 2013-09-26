@@ -168,7 +168,7 @@ int dnsq(
 		i = 0;
 		do {
 			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
-			if (saddr_buf_len == -1) {
+			if (saddr_buf_len < 12) { /* must have header */
 				err = 4;
 				continue;
 			}
