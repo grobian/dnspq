@@ -266,14 +266,12 @@ int dnsq(
 	/* close, we don't need anything following after this point */
 	close(fd);
 
-	if (err != 0) {
 #ifdef LOGGING
+	if (err != 0)
 		syslog(LOG_INFO, "error while resolving %s, code %d", a, err);
 #endif
-		return err;
-	}
 
-	return 0;
+	return err;
 }
 
 int main(int argc, char *argv[]) {
