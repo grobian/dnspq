@@ -193,10 +193,10 @@ int dnsq(
 			switch (RCODE(p)) {
 				case 0: /* no error */
 					break;
-				case 1:
-				case 2:
-				case 4:
-				case 5:
+				case 1: /* format error */
+				case 2: /* server failure */
+				case 4: /* not implemented */
+				case 5: /* refused */
 					/* we likely did something wrong */
 					err = 10;
 					continue;
@@ -204,7 +204,7 @@ int dnsq(
 					/* NXDOMAIN */
 					err = 13;
 					continue;
-				default:
+				default: /* reserved for future use */
 					err = 11;
 					continue;
 			}
