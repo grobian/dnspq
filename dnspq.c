@@ -145,7 +145,7 @@ int dnsq(
 
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
-			if (sendto(fd, dnspkg, len, 0,
+			if (sendto(fd, dnspkg, len, MSG_DONTWAIT,
 						(struct sockaddr *)dnsservers[i],
 						sizeof(*dnsservers[i])) != len)
 				return 2;  /* TODO: fail only when all fail? */
@@ -168,7 +168,10 @@ int dnsq(
 		nums = i;
 		i = 0;
 		do {
-			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
+			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg),
+					MSG_DONTWAIT, NULL, NULL);
+
+			/* got a response, see if it's sane */
 			if (saddr_buf_len < 12) { /* must have header */
 				err = 4;
 				continue;
