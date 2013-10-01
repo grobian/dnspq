@@ -96,20 +96,6 @@ int dnsq(
 		cntr = 1;
 
 	/* header */
-	memset(p, 0, 4);  /* need zeros; macros below do or-ing due to bits */
-	/* SET_ID is done per server */
-	SET_QR(p, 0 /* query */);
-	SET_OPCODE(p, 0 /* standard query */);
-	SET_AA(p, 0);
-	SET_TC(p, 0);
-	SET_RD(p, 0);
-	SET_RA(p, 0);
-	SET_Z(p, 0);
-	SET_RCODE(p, 0);
-	SET_QDCOUNT(p, 1 /* one question */);
-	SET_ANCOUNT(p, 0);
-	SET_NSCOUNT(p, 0);
-	SET_ARCOUNT(p, 0);
 	p += 12;
 
 	/* question section */
@@ -146,6 +132,21 @@ int dnsq(
 	gettimeofday(&begin, NULL);
 	do {
 		p = dnspkg;
+		memset(p, 0, 4); /* need zeros; macros below do or-ing due to bits */
+		/* SET_ID is done per server */
+		SET_QR(p, 0 /* query */);
+		SET_OPCODE(p, 0 /* standard query */);
+		SET_AA(p, 0);
+		SET_TC(p, 0);
+		SET_RD(p, 0);
+		SET_RA(p, 0);
+		SET_Z(p, 0);
+		SET_RCODE(p, 0);
+		SET_QDCOUNT(p, 1 /* one question */);
+		SET_ANCOUNT(p, 0);
+		SET_NSCOUNT(p, 0);
+		SET_ARCOUNT(p, 0);
+
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
 			if (sendto(fd, dnspkg, len, 0,
