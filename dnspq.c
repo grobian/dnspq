@@ -88,6 +88,7 @@ int dnsq(
 	uint16_t qid;
 	char retries = MAX_RETRIES;
 	suseconds_t maxtime = MAX_TIMEOUT;
+	suseconds_t waittime = RETRY_TIMEOUT;
 	char err = 0;
 
 	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
@@ -152,9 +153,10 @@ int dnsq(
 		}
 
 		gettimeofday(&end, NULL);
-		maxtime -= timediff(begin, end);
 		/* wait at most RETRY_TIMOUT */
-		tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime;
+		tv.tv_usec = waittime = maxtime - timediff(begin, end);
+		if (tv.tv_usec > RETRY_TIMEOUT)
+			tv.tv_usec = waittime = RETRY_TIMEOUT;
 		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
 			if (retries-- > 0) {
 				close(fd);
@@ -261,16 +263,15 @@ int dnsq(
 
 			break;
 		} while (gettimeofday(&end, NULL) == 0 &&
-				(maxtime -= timediff(begin, end)) > 0 &&
-				i < nums &&
-				(tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime) > 0);
+				waittime - timediff(begin, end) > 0 &&
+				i < nums);
 #if LOGGING > 2
 		if (err != 0)
 			syslog(LOG_INFO, "retrying due to error, code %d, time left: %zd, nums: %d, i: %d",
-					err, maxtime, nums, i);
+					err, maxtime - timediff(begin, end), nums, i);
 #endif
 		close(fd);
-	} while (err != 0 && err != 13 && maxtime > 0);
+	} while (err != 0 && err != 13 && maxtime - timediff(begin, end) > 0);
 
 #ifdef LOGGING
 	if (err != 0)
