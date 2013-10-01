@@ -203,8 +203,8 @@ int dnsq(
 				case 5: /* refused */
 					/* we likely did something wrong */
 #if LOGGING > 2
-					syslog(LOG_INFO, "serv fail: %d, %x %x %x %x",
-							qid, p[0], p[1], p[2], p[3]);
+					syslog(LOG_INFO, "serv fail: %d/%d, %x %x %x %x",
+							qid, i, p[0], p[1], p[2], p[3]);
 #endif
 					err = 10;
 					continue;
