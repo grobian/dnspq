@@ -118,12 +118,6 @@ int dnsq(
 	p += 2;
 
 	/* answer sections not necessary */
-
-	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-		return 1;
-	FD_ZERO(&fds);
-	FD_SET(fd, &fds);
-
 	len = p - dnspkg;
 
 	/* horse-drug in case sending or receiving sort of hangs */
@@ -149,6 +143,11 @@ int dnsq(
 		SET_ANCOUNT(p, 0);
 		SET_NSCOUNT(p, 0);
 		SET_ARCOUNT(p, 0);
+
+		if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+			return 1;
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
 
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
@@ -270,10 +269,8 @@ int dnsq(
 		if (err != 0)
 			syslog(LOG_INFO, "retrying due to error, code %d", err);
 #endif
+		close(fd);
 	} while (err != 0 && err != 13 && maxtime > 0);
-
-	/* close, we don't need anything after this point */
-	close(fd);
 
 #ifdef LOGGING
 	if (err != 0)
