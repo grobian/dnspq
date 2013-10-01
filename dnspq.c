@@ -202,6 +202,10 @@ int dnsq(
 				case 4: /* not implemented */
 				case 5: /* refused */
 					/* we likely did something wrong */
+#if LOGGING > 2
+					syslog(LOG_INFO, "serv fail: %d, %x %x %x %x",
+							qid, p[0], p[1], p[2], p[3]);
+#endif
 					err = 10;
 					continue;
 				case 3:
@@ -262,7 +266,8 @@ int dnsq(
 				(tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime) > 0);
 #if LOGGING > 2
 		if (err != 0)
-			syslog(LOG_INFO, "retrying due to error, code %d", err);
+			syslog(LOG_INFO, "retrying due to error, code %d, time left: %zd, nums: %d, i: %d",
+					err, maxtime, nums, i);
 #endif
 		close(fd);
 	} while (err != 0 && err != 13 && maxtime > 0);
