@@ -171,8 +171,7 @@ int dnsq(
 		}
 		FD_CLR(fd, &fds);
 
-		/* got a response, see if it's sane */
-		nums = i - 1;
+		nums = i;
 		i = 0;
 		do {
 			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg), 0, NULL, 0);
