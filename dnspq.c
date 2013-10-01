@@ -121,6 +121,9 @@ int dnsq(
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 		return 1;
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+
 	len = p - dnspkg;
 
 	/* horse-drug in case sending or receiving sort of hangs */
@@ -159,9 +162,6 @@ int dnsq(
 		maxtime -= timediff(begin, end);
 		/* wait at most RETRY_TIMOUT */
 		tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime;
-
-		FD_ZERO(&fds);
-		FD_SET(fd, &fds);
 		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
 			if (retries-- > 0) {
 				continue;
