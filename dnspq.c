@@ -55,6 +55,12 @@
 #ifndef MAX_RETRIES
 # define MAX_RETRIES  1
 #endif
+#ifndef MAX_TIMEOUT
+# define MAX_TIMEOUT  500 * 1000  /* 500ms, the max time we want to wait */
+#endif
+#ifndef RETRY_TIMEOUT
+# define RETRY_TIMEOUT  300 * 1000  /* 300ms, time to wait for answers */
+#endif
 
 static uint16_t cntr = 0;
 
@@ -81,8 +87,9 @@ int dnsq(
 	int nums = 0;
 	uint16_t qid;
 	char retries = MAX_RETRIES;
-	suseconds_t maxtime = 500 * 1000;  /* 500ms, the max time we want to wait */
+	suseconds_t maxtime = MAX_TIMEOUT;
 	char err = 0;
+	int sret;
 
 	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
 		cntr++;
