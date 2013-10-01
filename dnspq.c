@@ -120,12 +120,6 @@ int dnsq(
 	/* answer sections not necessary */
 	len = p - dnspkg;
 
-	/* horse-drug in case sending or receiving sort of hangs */
-	tv.tv_sec = 0;
-	tv.tv_usec = 250 * 1000;
-	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
 	gettimeofday(&begin, NULL);
 	do {
 		p = dnspkg;
