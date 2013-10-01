@@ -163,13 +163,13 @@ int dnsq(
 		tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime;
 		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
 			if (retries-- > 0) {
+				close(fd);
 				continue;
 			} else {
 				err = 1;
 				break;
 			}
 		}
-		FD_CLR(fd, &fds);
 
 		nums = i;
 		i = 0;
@@ -262,8 +262,7 @@ int dnsq(
 		} while (gettimeofday(&end, NULL) == 0 &&
 				(maxtime -= timediff(begin, end)) > 0 &&
 				i < nums &&
-				(tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime) > 0 &&
-				select(fd + 1, &fds, NULL, NULL, &tv) > 0);
+				(tv.tv_usec = maxtime > RETRY_TIMEOUT ? RETRY_TIMEOUT : maxtime) > 0);
 #if LOGGING > 2
 		if (err != 0)
 			syslog(LOG_INFO, "retrying due to error, code %d", err);
