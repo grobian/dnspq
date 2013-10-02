@@ -65,7 +65,7 @@
 static uint16_t cntr = 0;
 
 #define timediff(X, Y) \
-		(Y.tv_sec - X.tv_sec) * 1000 * 1000 + (Y.tv_usec - X.tv_usec)
+	(Y.tv_sec > X.tv_sec ? (Y.tv_sec - X.tv_sec) * 1000 * 1000 + ((Y.tv_usec - X.tv_usec)) : Y.tv_usec - X.tv_usec)
 
 int dnsq(
 		struct sockaddr_in* const dnsservers[],
