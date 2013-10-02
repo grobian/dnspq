@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -79,7 +80,6 @@ int dnsq(
 	char *ap;
 	size_t len;
 	int saddr_buf_len;
-	fd_set fds;
 	int fd;
 	struct timeval tv;
 	struct timeval begin, end;
@@ -88,7 +88,7 @@ int dnsq(
 	uint16_t qid;
 	char retries = MAX_RETRIES;
 	suseconds_t maxtime = MAX_TIMEOUT;
-	suseconds_t waittime = RETRY_TIMEOUT;
+	suseconds_t waittime = 0;
 	char err = 0;
 
 	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
@@ -121,7 +121,10 @@ int dnsq(
 	/* answer sections not necessary */
 	len = p - dnspkg;
 
+	tv.tv_sec = 0;
 	gettimeofday(&begin, NULL);
+	end.tv_sec = begin.tv_sec;
+	end.tv_usec = begin.tv_usec;
 	do {
 		p = dnspkg;
 		memset(p, 0, 4); /* need zeros; macros below do or-ing due to bits */
@@ -141,40 +144,43 @@ int dnsq(
 
 		if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 			return 1;
-		FD_ZERO(&fds);
-		FD_SET(fd, &fds);
+
+		/* wait at most half of RETRY_TIMOUT */
+		tv.tv_usec = maxtime - timediff(begin, end);
+		if (tv.tv_usec > RETRY_TIMEOUT / 2)
+			tv.tv_usec = RETRY_TIMEOUT / 2;
+		setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
 		for (i = 0; i < MAXSERVERS && dnsservers[i] != NULL; i++) {
 			SET_ID(p, cntr + i);
-			if (sendto(fd, dnspkg, len, MSG_DONTWAIT,
+			if (sendto(fd, dnspkg, len, 0,
 						(struct sockaddr *)dnsservers[i],
 						sizeof(*dnsservers[i])) != len)
 				return 2;  /* TODO: fail only when all fail? */
 		}
 
-		gettimeofday(&end, NULL);
-		/* wait at most RETRY_TIMOUT */
-		tv.tv_usec = waittime = maxtime - timediff(begin, end);
-		if (tv.tv_usec > RETRY_TIMEOUT)
-			tv.tv_usec = waittime = RETRY_TIMEOUT;
-		if (select(fd + 1, &fds, NULL, NULL, &tv) <= 0) {
-			if (retries-- > 0) {
-				close(fd);
-				continue;
-			} else {
-				err = 1;
-				break;
-			}
-		}
-
+		/* this can be off by RETRY_TIMOUT / 2 * i, but saves us a
+		 * gettimeofday() call */
+		waittime = timediff(begin, end) + RETRY_TIMEOUT;
+		if (waittime > maxtime)
+			waittime = maxtime;
 		nums = i;
 		i = 0;
 		do {
+			gettimeofday(&end, NULL);
+			tv.tv_usec = waittime - timediff(begin, end);
+			if (tv.tv_usec <= 0)
+				break;
+			setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg),
-					MSG_DONTWAIT, NULL, NULL);
+					0, NULL, NULL);
 
-			/* got a response, see if it's sane */
-			if (saddr_buf_len < 12) { /* must have header */
+			if (saddr_buf_len < 0) {
+				err = 1;
+				if (errno == EINTR)
+					continue;
+				break;  /* read timeout, retry sending */
+			} else if (saddr_buf_len < 12) { /* must have header */
 				err = 4;
 				continue;
 			}
@@ -203,7 +209,7 @@ int dnsq(
 				case 2: /* server failure */
 				case 4: /* not implemented */
 				case 5: /* refused */
-					/* we likely did something wrong */
+					/* haproxy returns server failure for empty pools */
 #if LOGGING > 2
 					syslog(LOG_INFO, "serv fail: %d/%d, %x %x %x %x",
 							qid, i, p[0], p[1], p[2], p[3]);
@@ -262,16 +268,22 @@ int dnsq(
 			memcpy(ret, p, 4);
 
 			break;
-		} while (gettimeofday(&end, NULL) == 0 &&
-				waittime - timediff(begin, end) > 0 &&
-				i < nums);
+		} while (err != 0 && i < nums);
 #if LOGGING > 2
-		if (err != 0)
-			syslog(LOG_INFO, "retrying due to error, code %d, time left: %zd, nums: %d, i: %d",
-					err, maxtime - timediff(begin, end), nums, i);
+		if (err != 0) {
+			gettimeofday(&end, NULL);
+			syslog(LOG_INFO, "retrying due to error, code %d, time spent: %zd, time left: %zd, nums: %d, i: %d, retries: %d, tv: %zd %zd, %zd %zd",
+					err, timediff(begin, end), maxtime - timediff(begin, end),
+					nums, i, retries,
+					begin.tv_sec, begin.tv_usec,
+					end.tv_sec, end.tv_usec);
+		}
 #endif
 		close(fd);
-	} while (err != 0 && err != 13 && maxtime - timediff(begin, end) > 0);
+	} while (err != 0 && err != 13 &&
+	 		retries-- > 0 &&
+			gettimeofday(&end, NULL) == 0 &&
+			maxtime - timediff(begin, end) > 0);
 
 #ifdef LOGGING
 	if (err != 0)
