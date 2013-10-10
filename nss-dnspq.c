@@ -244,26 +244,27 @@ enum nss_status _nss_dnspq_gethostbyname3_r(const char *name, int af,
 	unsigned int ttl;
 	char sid;
 	struct sockaddr_in **dnsservers = NULL;
+	size_t nlen = 0;
 
 	if (af == AF_INET &&
-			buflen >= 8 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
+			(nlen = strlen(name)) > 0 &&
+			buflen >= nlen + 1 + 2 * sizeof(void *) + sizeof(struct in_addr) + sizeof(void *) &&
 			get_dnss_for_domain(&dnsservers, name) &&
 			dnsq(dnsservers, name, (struct in_addr *)buf, &ttl, &sid) == 0)
 	{
-		host->h_name = buf + sizeof(struct in_addr);
-		memcpy(host->h_name, "dnspq-X", 8);
-		host->h_name[6] = '0' + sid;
 		host->h_addrtype = af;
 		host->h_length = sizeof(struct in_addr);
-		host->h_addr_list = (char **)buf + sizeof(struct in_addr) + 8;
+		host->h_addr_list = (char **)buf + sizeof(struct in_addr);
 		host->h_addr_list[0] = buf;
 		host->h_addr_list[1] = NULL;
-		host->h_aliases = (char **)buf + sizeof(struct in_addr) + 8 + 2 * sizeof(void *);
+		host->h_aliases = (char **)&host->h_addr_list[2];
 		host->h_aliases[0] = NULL;
+		host->h_name = (char *)&host->h_aliases[1];
+		memcpy(host->h_name, name, nlen + 1);
 		if (ttlp != NULL)
 			*ttlp = (int32_t)ttl;
 		if (canonp != NULL)
-			*canonp = buf + sizeof(struct in_addr);
+			*canonp = host->h_name;
 
 		*errnop = 0;
 		*h_errnop = 0;
