@@ -1,0 +1,18 @@
+The objective of DNSpq is to query multiple DNS servers in parallel when
+trying to resolve a query.  The pq in DNSpq hence stands for Parallel
+Query.  Querying multiple servers in parallel is non-standard and
+aggressive towards nameservers, so not suited for use other than for a
+specific use-case, whis is most likely constrained to a local area
+network and dedicated DNS servers.
+
+
+Author
+------
+Fabian Groffen
+
+
+Acknowledgement
+---------------
+This library was originally developed for Booking.com.  With approval
+from Booking.com, the code was generalised and published as Open Source
+on github, for which the author would like to express his gratitude.
