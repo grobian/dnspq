@@ -37,6 +37,28 @@ responses to those.  The library, which is wrapped in a nss module
 a simple A-type query, and a simple response to that.  This makes it
 easy to have the library fallback queries to the normal glibc resolver.
 
+The configuration of DNSpq nss module goes in /etc/resolv-dnspq.conf.
+This file supports pool-based syntax to allow multiple pools to be
+setup, and also multiple providers for the same pool.  An example config
+might look like this:
+
+```
+# Syntax of this file is: .<domain> <server>[:<port>] [<server>[:<port>] ...]
+# The client picks a random server pair for domain if multiple matches exist.
+.my-pool 10.197.182.25:53001 10.197.182.26:53002
+.my-pool 10.197.182.25:53002 10.197.182.26:53003
+.my-pool 10.197.182.25:53003 10.197.182.26:53001
+```
+
+In this file, a pool called `my-pool` is defined with three providers,
+all using two servers.  The pool can be triggered by resolving anything
+from the `.my-pool` domain, e.g. `myhost.my-pool`.  Upon each query,
+DNSpq will pick a random provider for the `.my-pool` pool.  Once it has
+chosen one pool, it will send the DNS query to all of the servers listed
+for that pool to their designated IP address and port numbers.  One can
+play with this file in many ways to achieve balancing, sharding and
+more.
+
 
 Author
 ------
