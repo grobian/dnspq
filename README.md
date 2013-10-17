@@ -1,3 +1,8 @@
+dnspq
+=====
+
+DNS Parallel Quering library.
+
 The objective of DNSpq is to query multiple DNS servers in parallel when
 trying to resolve a query.  The pq in DNSpq hence stands for Parallel
 Query.  Querying multiple servers in parallel is non-standard and
