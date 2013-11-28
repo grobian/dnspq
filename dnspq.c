@@ -310,6 +310,8 @@ int dnsq(
 	return err;
 }
 
+
+#ifdef DNSPQ_TOOL
 int main(int argc, char *argv[]) {
 	struct in_addr ip;
 	unsigned int ttl;
@@ -361,3 +363,4 @@ int main(int argc, char *argv[]) {
 	}
 	return ret;
 }
+#endif
