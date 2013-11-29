@@ -24,7 +24,7 @@ PQCFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 override CFLAGS += $(PQCFLAGS)
 
 dnspq:
-	$(CC) -o $@ $(LDFLAGS) -DDNSPQ_TOOL=1 dnspq.c
+	$(CC) -o $@ $(CFLAGS) $(LDFLAGS) -DDNSPQ_TOOL=1 dnspq.c
 
 nss: libnss_dnspq.so.2
 
