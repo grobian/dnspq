@@ -139,32 +139,48 @@ void readconfig(void) {
 				continue;
 			if ((p = strchr(fps[dnsi - 1], '\n')) != NULL)
 				*p = '\0';
-			k = 0;
+			k = -1;
 			if (rpool == NULL) {
 				tdg = rpool = malloc(sizeof(domaingroup));
 				tdg->next = NULL;
 			} else {
+				ndg = NULL;
 				for (tdg = rpool; ; tdg = tdg->next) {
 					if (tdg->domain != NULL &&
 							strcmp(tdg->domain, buf + 1) == 0)
 					{
 						/* randomise insertion */
-						if ((k = tdg->poolcount++) > 1) {
-							for (j = rand() % k; j > 0; j--)
+						tdg->poolcount++;
+						k = rand() % tdg->poolcount;
+						if (k == 0) {
+							tdg = ndg;
+						} else {
+							for (j = 1; j < k; j++)
 								tdg = tdg->next;
 						}
 						break;
 					}
 					if (tdg->next == NULL)
 						break;
+					ndg = tdg;
 				}
 				ndg = malloc(sizeof(domaingroup));
-				ndg->next = tdg->next;
-				tdg = tdg->next = ndg;
+				if (tdg == NULL) {
+					ndg->next = rpool;
+					tdg = rpool = ndg;
+				} else {
+					ndg->next = tdg->next;
+					tdg = tdg->next = ndg;
+				}
 			}
-			if (k == 0) {
+			if (k == -1) {
 				tdg->domain = strdup(buf + 1);
 				tdg->poolcount = 1;
+			} else if (k == 0) {
+				tdg->domain = tdg->next->domain;
+				tdg->poolcount = tdg->next->poolcount;
+				tdg->next->domain = NULL;
+				tdg->next->poolcount = 0;
 			} else {
 				tdg->domain = NULL;
 				tdg->poolcount = 0;
