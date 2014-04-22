@@ -310,56 +310,126 @@ int dnsq(
 	return err;
 }
 
+static void
+do_version(void)
+{
+	printf("DNS Parallel Query v" VERSION " (" GIT_VERSION ")  <fabian.groffen@booking.com>\n");
+}
 
 #ifdef DNSPQ_TOOL
+static void
+do_usage(void)
+{
+	do_version();
+	printf("options:\n");
+	printf("  -v                  print version\n");
+	printf("  -h                  this screen\n");
+	printf("  -s <server[:port]>  server to query, multiple -s options are allowed\n");
+	printf("all further arguments (or those after --) are being queried against\n");
+	printf("the servers given, at least one server must be supplied\n");
+}
+
 int main(int argc, char *argv[]) {
 	struct in_addr ip;
 	unsigned int ttl;
 	char serverid;
 	int ret;
-	FILE *resolvconf = NULL;
-	char buf[512];
 	char *p;
+	char *q;
+	char *r;
 	int i;
+	int a;
 	struct sockaddr_in *dnsservers[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	struct sockaddr_in *dnsserver;
 	int dnsi = 0;
 
 	if (argc == 1) {
-		printf("DNS Parallel Query v" VERSION " (" GIT_VERSION ")  <fabian.groffen@booking.com>\n");
+		do_version();
 		return 0;
 	}
 
-	if ((resolvconf = fopen("/etc/resolv.conf" /* FIXME */, "r")) == NULL)
-		return 1;
-	for (i = 0; i < 24 && fgets(buf, sizeof(buf), resolvconf) != NULL; i++)
-		if (
-				buf[0] == 'n' &&
-				buf[1] == 'a' &&
-				buf[2] == 'm' &&
-				buf[3] == 'e' &&
-				buf[4] == 's' &&
-				buf[5] == 'e' &&
-				buf[6] == 'r' &&
-				buf[7] == 'v' &&
-				buf[8] == 'e' &&
-				buf[9] == 'r')
-		{
-			if (dnsi == sizeof(dnsservers) - 1)
-				break;
-			if ((p = strchr(buf + 11, '\n')) != NULL)
-				*p = '\0';
-			dnsserver = dnsservers[dnsi++] = malloc(sizeof(*dnsserver));
-			if (inet_pton(AF_INET, buf + 11, &(dnsserver->sin_addr)) <= 0)
-				return 2;
-			dnsserver->sin_family = AF_INET;
-			dnsserver->sin_port = htons(53);
-		}
-	fclose(resolvconf);
+	for (a = i = 1; i < argc; i++) {
+		p = argv[i];
+		if (p == NULL)
+			continue;
+		if (*p == '-') {
+			p++;
+			switch (*p) {
+				case 's':
+					/* -s: server */
+					if (++p != '\0')
+						p = argv[++i];
+					if (dnsi == sizeof(dnsservers) - 1) {
+						fprintf(stderr, "not adding server '%s', "
+								"too many already (%zu)\n",
+								p, sizeof(dnsservers) - 1);
+						break;
+					}
+					r = NULL;
+					for (q = p; *q != '\0'; q++) {
+						if (*q == ':') {
+							*q = '\0';
+							r = q + 1;
+						}
+					}
 
-	if ((ret = dnsq(dnsservers, argv[1], &ip, &ttl, &serverid)) == 0) {
-		printf("%s (%us/%d)\n", inet_ntoa(ip), ttl, serverid);
-		return 0;
+					dnsserver = dnsservers[dnsi++] = malloc(sizeof(*dnsserver));
+					dnsserver->sin_family = AF_INET;
+					if (inet_pton(dnsserver->sin_family, p,
+								&(dnsserver->sin_addr)) <= 0)
+					{
+						fprintf(stderr, "failed to parse IP address '%s'\n", p);
+						return 1;
+					}
+					if (r != NULL) {
+						dnsserver->sin_port = htons(atoi(r));
+					} else {
+						dnsserver->sin_port = htons(53);
+					}
+					a = i + 1;
+					break;
+				case 'v':
+					/* -v: version */
+					do_version();
+					return 0;  /* yes, just quit */
+				case 'h':
+					/* -h: help */
+					do_usage();
+					return 0;  /* yes, just quit */
+				case '-':
+					/* --: end of arguments marker */
+					a = i + 1;
+					i = argc;
+					break;
+				default:
+					/* unknown argument */
+					fprintf(stderr, "unknown argument -%c\n", *p);
+					return 1;
+			}
+		} else {
+			a = i;
+			break;
+		}
+	}
+
+	if (dnsi == 0) {
+		do_usage();
+		return 1;
+	}
+
+	ret = 0;
+	for (i = a; i < argc; i++) {
+		if ((ret = dnsq(dnsservers, argv[i], &ip, &ttl, &serverid)) == 0) {
+			printf("%s (TTL: %us, ",
+					inet_ntoa(ip), ttl);
+			printf("responder %d: %s)  %s\n",
+					serverid,
+					inet_ntoa((dnsservers[(int)serverid])->sin_addr),
+					argv[i]);
+		} else {
+			printf("failed to resolve %s, code %d\n", argv[i], ret);
+			ret = 1;
+		}
 	}
 	return ret;
 }
