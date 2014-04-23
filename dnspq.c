@@ -80,6 +80,55 @@
 # define RETRY_TIMEOUT  300 * 1000  /* 300ms, time to wait for answers */
 #endif
 
+typedef enum {
+	NOERR = 0,
+	NODATA = 1,
+	SENDFAIL = 2,
+	QTOOLONG = 3,
+	NOHDR = 4,
+	SOCKFAIL = 5,
+	INVALIDID = 7,
+	DNSNOQR = 8,
+	DNSNOSQ = 9,
+	DNSRFAIL = 10,
+	DNSFUTURE = 11,
+	DNSEMPTY = 12,
+	DNSNXDOMAIN = 13,
+	INCOMPLETE = 14,
+	DNSAINVALIDLEN = 15,
+	DNSNOA = 16,
+	DNSNOIN = 17
+} dnspq_errno;
+
+#if defined(LOGGING) || defined(DNSPQ_TOOL)
+static const char *dnspq_errcodes[] = {
+	/*  0 */ "Success",
+	/*  1 */ "No data received from server",
+	/*  2 */ "Input query too long (exceeds 255 characters)",
+	/*  3 */ "Failed to create socket",
+	/*  4 */ "Server sent incomplete data, expected header",
+	/*  5 */ "Failed to send data to server",
+	/*  6 */ NULL,
+	/*  7 */ "Server sent invalid ID (not matching our request)",
+	/*  8 */ "DNS answer is not a response message",
+	/*  9 */ "DNS answer is not a standard query",
+	/* 10 */ "DNS answer is: format error, server failure, not implemented, or refused",
+	/* 11 */ "DNS answer is: attempt to use future feature",
+	/* 12 */ "DNS answer doesn't have address answers",
+	/* 13 */ "DNS answer is: no such domain",
+	/* 14 */ "Received data is incomplete",
+	/* 15 */ "DNS answer has invalid length for IP response",
+	/* 16 */ "DNS answer isn't for type A",
+	/* 17 */ "DNS answer isn't for class IN"
+};
+
+static const char *
+dnspq_strerror(dnspq_errno err)
+{
+	return dnspq_errcodes[err];
+}
+#endif
+
 static uint16_t cntr = 0;
 
 #define timediff(X, Y) \
@@ -106,7 +155,7 @@ int dnsq(
 	char retries = MAX_RETRIES;
 	suseconds_t maxtime = MAX_TIMEOUT;
 	suseconds_t waittime = 0;
-	char err = 0;
+	dnspq_errno err = NOERR;
 
 	if (++cntr == 0)  /* next sequence number, start at 1 (detect errs)  */
 		cntr++;
@@ -120,7 +169,7 @@ int dnsq(
 	while ((ap = strchr(a, '.')) != NULL) {
 		len = ap - a;
 		if (len > 255)  /* proto spec */
-			return 1;
+			return QTOOLONG;
 		*p++ = (unsigned char)len;
 		memcpy(p, a, len);
 		p += len;
@@ -160,7 +209,7 @@ int dnsq(
 		SET_ARCOUNT(p, 0);
 
 		if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-			return 1;
+			return SOCKFAIL;
 
 		/* wait at most half of RETRY_TIMOUT */
 		tv.tv_usec = maxtime - timediff(begin, end);
@@ -173,7 +222,7 @@ int dnsq(
 			if (sendto(fd, dnspkg, len, 0,
 						(struct sockaddr *)dnsservers[i],
 						sizeof(*dnsservers[i])) != len)
-				return 2;  /* TODO: fail only when all fail? */
+				return SENDFAIL;  /* TODO: fail only when all fail? */
 		}
 
 		/* this can be off by RETRY_TIMOUT / 2 * i, but saves us a
@@ -193,30 +242,30 @@ int dnsq(
 					0, NULL, NULL);
 
 			if (saddr_buf_len < 0) {
-				err = 1;
+				err = NODATA;
 				if (errno == EINTR)
 					continue;
 				break;  /* read timeout, retry sending */
 			} else if (saddr_buf_len < 12) { /* must have header */
-				err = 4;
+				err = NOHDR;
 				continue;
 			}
 
 			p = dnspkg;
 			qid = ID(p);
 			if (qid < cntr || qid > cntr + nums) {
-				err = 7; /* message not matching our request id */
+				err = INVALIDID; /* message not matching our request id */
 				continue;
 			}
 			/* ID matches, assume from a server we sent to */
 			i++;
 			*serverid = qid - cntr;
 			if (QR(p) != 1) {
-				err = 8; /* not a response */
+				err = DNSNOQR; /* not a response */
 				continue;
 			}
 			if (OPCODE(p) != 0) {
-				err = 9; /* not a standard query */
+				err = DNSNOSQ; /* not a standard query */
 				continue;
 			}
 			switch (RCODE(p)) {
@@ -231,23 +280,23 @@ int dnsq(
 					syslog(LOG_INFO, "serv fail: %d/%d, %x %x %x %x",
 							qid, i, p[0], p[1], p[2], p[3]);
 #endif
-					err = 10;
+					err = DNSRFAIL;
 					continue;
 				case 3:
 					/* NXDOMAIN */
-					err = 13;
+					err = DNSNXDOMAIN;
 					continue;
 				default: /* reserved for future use */
-					err = 11;
+					err = DNSFUTURE;
 					continue;
 			}
 			if (ANCOUNT(p) < 1) {
-				err = 12; /* we only support non-empty answers */
+				err = DNSEMPTY; /* we only support non-empty answers */
 				continue;
 			}
 
 			if (saddr_buf_len <= len) {
-				err = 14;
+				err = INCOMPLETE;
 				continue;
 			}
 
@@ -264,50 +313,52 @@ int dnsq(
 				p++;
 			}
 			if (ID(p) != 1 /* QTYPE == A */) {
-				err = 16;
+				err = DNSNOA;
 				continue;
 			}
 			p += 2;
 			if (ID(p) != 1 /* QCLASS == IN */) {
-				err = 14;
+				err = DNSNOIN;
 				continue;
 			}
 			p += 2;
 			*ttl = ntohs(*(uint32_t*)p);
 			p += 4;
 			if (ID(p) != 4) {
-				err = 15;
+				err = DNSAINVALIDLEN;
 				continue;
 			}
 			p += 2;
 
-			err = 0;
+			err = NOERR;
 			memcpy(ret, p, 4);
 
 			break;
-		} while (err != 0 && i < nums);
+		} while (err != NOERR && i < nums);
 #if LOGGING > 2
-		if (err != 0) {
+		if (err != NOERR) {
 			gettimeofday(&end, NULL);
-			syslog(LOG_INFO, "retrying due to error, code %d, time spent: %zd, time left: %zd, nums: %d, i: %d, retries: %d, tv: %zd %zd, %zd %zd",
-					err, timediff(begin, end), maxtime - timediff(begin, end),
+			syslog(LOG_INFO, "retrying due to error, code %d (%s), time spent: %zd, time left: %zd, nums: %d, i: %d, retries: %d, tv: %zd %zd, %zd %zd",
+					err, dnspq_strerror(err),
+					timediff(begin, end), maxtime - timediff(begin, end),
 					nums, i, retries,
 					begin.tv_sec, begin.tv_usec,
 					end.tv_sec, end.tv_usec);
 		}
 #endif
 		close(fd);
-	} while (err != 0 && err != 13 &&
+	} while (err != NOERR && err != DNSNXDOMAIN &&
 	 		retries-- > 0 &&
 			gettimeofday(&end, NULL) == 0 &&
 			maxtime - timediff(begin, end) > 0);
 
 #ifdef LOGGING
-	if (err != 0)
-		syslog(LOG_INFO, "error while resolving %s, code %d", a, err);
+	if (err != NOERR)
+		syslog(LOG_INFO, "error while resolving %s, code %d (%s)",
+				a, err, dnspq_strerror(err));
 #endif
 
-	return err;
+	return (char)err;
 }
 
 static void
@@ -334,6 +385,7 @@ int main(int argc, char *argv[]) {
 	struct in_addr ip;
 	unsigned int ttl;
 	char serverid;
+	dnspq_errno err;
 	int ret;
 	char *p;
 	char *q;
@@ -420,7 +472,7 @@ int main(int argc, char *argv[]) {
 
 	ret = 0;
 	for (i = a; i < argc; i++) {
-		if ((ret = dnsq(dnsservers, argv[i], &ip, &ttl, &serverid)) == 0) {
+		if ((err = (dnspq_errno)dnsq(dnsservers, argv[i], &ip, &ttl, &serverid)) == NOERR) {
 			printf("%-15s (TTL: %us, ",
 					inet_ntoa(ip), ttl);
 			dnsserver = dnsservers[(int)serverid];
@@ -430,7 +482,7 @@ int main(int argc, char *argv[]) {
 					ntohs(dnsserver->sin_port),
 					argv[i]);
 		} else {
-			printf("failed to resolve %s, code %d\n", argv[i], ret);
+			printf("failed to resolve %s: %s\n", argv[i], dnspq_strerror(err));
 			ret = 1;
 		}
 	}
