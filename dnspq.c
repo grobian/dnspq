@@ -420,11 +420,13 @@ int main(int argc, char *argv[]) {
 	ret = 0;
 	for (i = a; i < argc; i++) {
 		if ((ret = dnsq(dnsservers, argv[i], &ip, &ttl, &serverid)) == 0) {
-			printf("%s (TTL: %us, ",
+			printf("%-15s (TTL: %us, ",
 					inet_ntoa(ip), ttl);
-			printf("responder %d: %s)  %s\n",
+			dnsserver = dnsservers[(int)serverid];
+			printf("responder %d: %15s:%d)  %s\n",
 					serverid,
-					inet_ntoa((dnsservers[(int)serverid])->sin_addr),
+					inet_ntoa(dnsserver->sin_addr),
+					ntohs(dnsserver->sin_port),
 					argv[i]);
 		} else {
 			printf("failed to resolve %s, code %d\n", argv[i], ret);
