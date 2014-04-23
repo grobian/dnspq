@@ -313,7 +313,7 @@ int dnsq(
 static void
 do_version(void)
 {
-	printf("DNS Parallel Query v" VERSION " (" GIT_VERSION ")  <fabian.groffen@booking.com>\n");
+	printf("DNS Parallel Query v" VERSION " (" GIT_VERSION ")\n");
 }
 
 #ifdef DNSPQ_TOOL
@@ -321,6 +321,7 @@ static void
 do_usage(void)
 {
 	do_version();
+	printf("diagnostic tool to test using/with dnspq against DNS servers\n");
 	printf("options:\n");
 	printf("  -v                  print version\n");
 	printf("  -h                  this screen\n");
