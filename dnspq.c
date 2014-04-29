@@ -410,7 +410,7 @@ int main(int argc, char *argv[]) {
 			switch (*p) {
 				case 's':
 					/* -s: server */
-					if (++p != '\0')
+					if (*++p == '\0')
 						p = argv[++i];
 					if (dnsi == sizeof(dnsservers) - 1) {
 						fprintf(stderr, "not adding server '%s', "
