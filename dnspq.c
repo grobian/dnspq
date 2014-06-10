@@ -221,8 +221,10 @@ int dnsq(
 			SET_ID(p, cntr + i);
 			if (sendto(fd, dnspkg, len, 0,
 						(struct sockaddr *)dnsservers[i],
-						sizeof(*dnsservers[i])) != len)
+						sizeof(*dnsservers[i])) != len) {
+				close(fd);
 				return SENDFAIL;  /* TODO: fail only when all fail? */
+			}
 		}
 
 		/* this can be off by RETRY_TIMOUT / 2 * i, but saves us a
