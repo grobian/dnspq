@@ -239,7 +239,7 @@ int dnsq(
 			tv.tv_usec = waittime - timediff(begin, end);
 			if (tv.tv_usec <= 0)
 				break;
-			setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+			(void) setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 			saddr_buf_len = recvfrom(fd, dnspkg, sizeof(dnspkg),
 					0, NULL, NULL);
 
